@@ -1,0 +1,23 @@
+{
+  "hostname": "{{ dsapid_hostname }}",
+  "base_url": "{{ dsapid_baseurl }}/",
+  "datadir": "{{ dsapid_imagesdir }}",
+  "mount_ui": "{{ dsapid_uidir }}",
+  "users": "{{ dsapid_configdir }}/users.json",
+  "listen": {
+    "http": {
+      "address": "0.0.0.0:{{ dsapid_port }}",
+      "ssl": {{ dsapid_ssl }}
+    }
+  },
+  "sync": [
+    {
+      "name": "official joyent imgapi",
+      "active": false,
+      "type": "imgapi",
+      "provider": "joyent",
+      "source": "https://images.joyent.com/images",
+      "delay": "12h"
+    }
+  ]
+}

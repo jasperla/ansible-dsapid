@@ -1,0 +1,101 @@
+- name: Install and run dsapid
+  hosts: all
+  become: True
+  become_user: root
+  vars:
+    dsapid_package: "github.com/MerlinDMC/dsapid/server"
+    dsapid_hostname: "images.jasper.la"
+    dsapid_baseurl: "http://{{ dsapid_hostname }}"
+    dsapid_datadir: /opt/dsapid
+    dsapid_imagesdir: "{{ dsapid_datadir }}/images"
+    dsapid_uidir: "{{ ui_path }}/_public/"
+    dsapid_configdir: "{{ dsapid_datadir }}/config"
+    dsapid_loglevel: info
+    dsapid_ssl: "false"
+    dsapid_port: 8000
+    ui_repo: "https://github.com/jasperla/dsapi-ui.git"
+    ui_path: /opt/local/dsapi-ui
+  tasks:
+    - name: upgrade all packages
+      pkgin: full_upgrade=yes update_cache=yes
+
+    - name: install base packages
+      pkgin: name={{ item }} state=present
+      with_items:
+        - go
+        - tmux
+        - wget
+
+    - name: create data directores
+      file: name={{ item }} state=directory
+      with_items:
+        - "{{ dsapid_datadir }}"
+        - "{{ dsapid_imagesdir }}"
+        - "{{ dsapid_configdir }}"
+
+    - name: fetch dsapid sources
+      command: "go get -d {{ dsapid_package }}"
+      args:
+        creates: "/root/Go/src/{{ dsapid_package }}"
+      environment:
+        GOPATH: /root/Go
+
+    - name: build dsapid
+      command: "go build -o /opt/local/bin/dsapid {{ dsapid_package }}"
+      args:
+        creates: /opt/local/bin/dsapid
+      environment:
+        GOPATH: /root/Go
+
+    - name: make dsapid executable
+      file: path=/opt/local/bin/dsapid state=file mode=0755
+
+    - name: install config.json
+      template:
+        src: templates/dsapid/config.json.j2
+        dest: "{{ dsapid_configdir }}/config.json"
+        mode: 0600
+      notify: restart dsapid service
+
+    - name: install users.json
+      template:
+        src: templates/dsapid/users.json.j2
+        dest: "{{ dsapid_configdir }}/users.json"
+        mode: 0600
+
+    - name: install SMF manifest
+      template:
+        src: templates/dsapid/dsapid.xml.j2
+        dest: "{{ dsapid_configdir }}/dsapid.xml"
+        validate: "svccfg validate %s"
+      notify:
+        - create SMF service
+        - restart dsapid service
+
+    - name: get frontend ui sources
+      git:
+        repo: "{{ ui_repo }}"
+        dest: "{{ ui_path }}"
+        accept_hostkey: True
+      notify: rebuild frontend
+
+    - name: install brunch
+      npm: name=brunch global=yes state=present
+
+    - name: install development dependencies
+      command: npm install
+      args:
+        chdir: "{{ ui_path }}"
+        creates: "{{ ui_path }}/node_modules/"
+
+  handlers:
+    - name: create SMF service
+      command: "svccfg import {{ dsapid_configdir }}/dsapid.xml"
+
+    - name: restart dsapid service
+      service: name=dsapid state=restarted
+
+    - name: rebuild frontend
+      command: brunch build
+      args:
+        chdir: "{{ ui_path }}"

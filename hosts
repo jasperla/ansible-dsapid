@@ -1,0 +1,1 @@
+dsapid ansible_ssh_host=192.168.178.172 ansible_python_interpreter=/opt/local/bin/python
